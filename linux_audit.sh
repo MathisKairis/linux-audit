@@ -540,6 +540,7 @@ check_user_security() {
     else
         print_check "$OK" "System accounts properly configured with nologin shells"
     fi
+}
 
 ################################################################################
 # System Information
