@@ -4,27 +4,38 @@
 ![Bash](https://img.shields.io/badge/Bash-5.0%2B-green.svg)
 ![Status](https://img.shields.io/badge/Status-Active-brightgreen.svg)
 
-Audit de sécurité automatisé et complet pour les systèmes Linux. **Lecture seule** - aucune modification système ne sera effectuée.
+Script d’audit de sécurité Linux en lecture seule, conçu pour fournir une évaluation rapide et fiable de la posture de sécurité d’un système.
+
+Aucune modification système n’est effectuée.
+
+## 🎯 Objectif du projet
+
+Fournir un audit de sécurité simple, lisible et exploitable, sans faux positifs excessifs, basé sur des contrôles concrets observables sur le système.
+
+Ce script est volontairement :
+
+ - non intrusif
+ - sans remédiation automatique
+ - orienté analyse humaine
+
 
 ## 📋 Fonctionnalités
 
-Le script effectue un audit complet sur 11 domaines de sécurité critiques :
+Le script effectue un audit sur les domaines de sécurité essentiels, adaptés à un diagnostic rapide.
 
 ### ✅ Vérifications Incluses
 
 | Domaine | Détails |
 |---------|---------|
-| **🔐 SSH** | État du root login, authentification par mot de passe, clés publiques, port SSH |
-| **🔥 Firewall** | État UFW/firewalld/iptables, nombre de règles actives |
-| **🔗 Ports** | Ports en écoute, services actifs |
-| **🛡️ MAC** | SELinux (Enforcing/Permissive), AppArmor status |
-| **📝 Fichiers** | Détection de fichiers world-writable dans les répertoires critiques |
-| **📋 Sudo** | Configuration de la journalisation sudo, logs disponibles |
-| **🔄 Mises à jour** | Unattended-upgrades, yum-cron, services actifs |
-| **🐧 Kernel** | Version du kernel, nécessité de redémarrage |
-| **🐳 Docker** | Conteneurs privilégiés, configuration userns-remap |
-| **💾 Backups** | Jobs de sauvegarde cron/systemd détectés |
-| **🕐 Temps** | Synchronisation NTP/Chrony/systemd-timesyncd |
+| **🔐 SSH** | État du service, root login, authentification par mot de passe, port, MaxAuthTries |
+| **🔥 Firewall** | Détection de firewall (ufw, iptables, firewalld) |
+| **🔗 Ports** | Ports TCP en écoute |
+| **🛡️ MAC** | Statut AppArmor |
+| **📝 Fichiers** | Fichiers world-writable dans les répertoires critiques |
+| **📋 Sudo** | Présence de logs sudo via journald |
+| **🔄 Mises à jour** | Statut des mises à jour automatiques |
+| **🐧 Kernel** | Version du noyau |
+| **👥 Comptes** | Détection de comptes UID 0 supplémentaires |
 
 ## 🚀 Installation & Utilisation
 
@@ -91,11 +102,14 @@ Risk Level: MEDIUM - Review recommendations
 Audit completed at: 2025-12-17 14:30:25
 ```
 
-### Niveaux de Risque
+### Interprétation
 
 - **🟢 LOW** - Système bien configuré
 - **🟡 MEDIUM** - Révision des recommandations nécessaire
 - **🔴 HIGH** - Action immédiate requise
+  
+Le niveau HIGH n’est déclenché que par des événements critiques réels, par exemple :
+- compte UID 0 supplémentaire
 
 ## 💡 Exemples d'Utilisation
 
@@ -114,53 +128,6 @@ sudo ./linux_audit.sh > audit_report.txt 2>&1
 sudo ./linux_audit.sh | tee audit_$(date +%Y%m%d_%H%M%S).log
 ```
 
-## 📝 Détails des Vérifications
-
-### SSH Security
-- ✓ PermitRootLogin est désactivé
-- ✓ PasswordAuthentication est désactivé
-- ✓ Service SSH actif
-- ✓ Authentification par clé publique activée
-- ✓ Port SSH non standard (sécurité renforcée)
-
-### Firewall
-- ✓ UFW actif et règles configurées
-- ✓ iptables avec règles actives
-- ✓ firewalld fonctionnel (RHEL/CentOS)
-
-### Mandatory Access Control
-- ✓ SELinux en mode Enforcing (idéal)
-- ✓ SELinux en mode Permissive (à améliorer)
-- ✓ AppArmor activé
-
-### Fichiers World-Writable
-- ✓ Scan des répertoires critiques : `/etc`, `/root`, `/home`, `/boot`
-- ✓ Identifie les risques de permissions
-
-### Sudo Logging
-- ✓ Configuration de la journalisation dans `/etc/sudoers.d`
-- ✓ Logs sudo présents dans `/var/log/auth.log` ou `/var/log/secure`
-
-### Mises à Jour Automatiques
-- ✓ Unattended-upgrades configuré (Debian/Ubuntu)
-- ✓ yum-cron actif (CentOS/RHEL)
-
-### Kernel
-- ✓ Version actuelle du kernel
-- ✓ Détecte si redémarrage nécessaire
-
-### Docker
-- ✓ Conteneurs privilégiés détectés
-- ✓ User namespace remapping configuré
-
-### Backups
-- ✓ Jobs cron de sauvegarde
-- ✓ Timers systemd de sauvegarde
-
-### Synchronisation Horaire
-- ✓ Chrony synchronisé
-- ✓ NTP en fonctionnement
-- ✓ systemd-timesyncd actif
 
 ## 🔒 Mode Lecture Seule
 
@@ -173,16 +140,6 @@ sudo ./linux_audit.sh | tee audit_$(date +%Y%m%d_%H%M%S).log
 
 Le script n'effectue que des vérifications et rapports.
 
-## 📊 Résultats & Interprétation
-
-### Résultat : [OK]
-La vérification a réussi. Le système respecte cette recommandation de sécurité.
-
-### Résultat : [WARN]
-Attention. Cette configuration mérite d'être examinée ou améliorée selon vos besoins.
-
-### Résultat : [FAIL]
-Critique. Cette configuration pose un risque de sécurité et nécessite une action.
 
 ## 🛠️ Compatibilité
 
@@ -190,45 +147,23 @@ Critique. Cette configuration pose un risque de sécurité et nécessite une act
 |-------------|---------|-------|
 | Ubuntu | ✅ Complet | Testé sur 20.04 LTS+ |
 | Debian | ✅ Complet | Support complet |
-| CentOS | ✅ Complet | CentOS 8+ |
 | RHEL | ✅ Complet | RHEL 8+ |
-| Fedora | ✅ Complet | Versions récentes |
 | Rocky | ✅ Complet | Support complet |
 | Alpine | ⚠️ Partiel | Utilitaires limités |
 
-## 🧪 Testing
 
-Pour tester le script dans un environnement Docker :
+## ⚠️ Limites connues
+- Pas de remédiation automatique
+- Pas d’export JSON
+- Pas de scoring CIS
 
-```bash
-# Avec Ubuntu
-docker run -it --rm -v $(pwd):/audit ubuntu:22.04 bash
-apt-get update && apt-get install -y sudo
-cd /audit
-chmod +x linux_audit.sh
-sudo ./linux_audit.sh
+  Ces choix sont volontaires.
 
-# Avec Debian
-docker run -it --rm -v $(pwd):/audit debian:bookworm bash
-apt-get update && apt-get install -y sudo
-cd /audit
-chmod +x linux_audit.sh
-sudo ./linux_audit.sh
-```
 
-## 📋 Requêtes Système
 
-Le script utilise les commandes système standards :
-- `getenforce` - SELinux status
-- `aa-enabled` - AppArmor status
-- `systemctl` - Service management
-- `grep`, `awk`, `find` - Text processing
-- `ss` ou `netstat` - Network information
-- `docker` - Container inspection
-- `chronyc`, `ntpq` - Time sync
-- `ufw` - Firewall status
 
-Toutes les erreurs sont supprimées (`2>/dev/null`) pour éviter les messages de bruit.
+Interprétation finale laissée à l’analyste
+
 
 ## 🤝 Contribution
 
@@ -240,13 +175,7 @@ Les contributions sont bienvenues !
 4. Poussez vers la branche (`git push origin feature/amelioration`)
 5. Ouvrez une Pull Request
 
-### Idées d'Améliorations
-- [ ] Support de plus de distros Linux
-- [ ] Export JSON/CSV des résultats
-- [ ] Gestion des alertes email
-- [ ] Comparaison avec benchmarks CIS
-- [ ] Dashboard web interactif
-- [ ] Tests automatisés
+
 
 ## 📄 Licence
 
@@ -267,25 +196,12 @@ Pour les questions, problèmes ou suggestions :
 - 💬 Participez aux discussions
 - 🐛 Signalez les bugs
 
-## 🎯 Roadmap
 
-- [x] Audit SSH complet
-- [x] Vérification Firewall
-- [x] Détection ports ouverts
-- [x] MAG (SELinux/AppArmor)
-- [x] Fichiers sensibles
-- [x] Logging sudo
-- [x] Mises à jour auto
-- [x] Info kernel
-- [x] Sécurité Docker
-- [x] Jobs de sauvegarde
-- [x] Sync horaire
-- [ ] Export JSON
-- [ ] Web dashboard
-- [ ] Alertes email
-- [ ] Benchmarks CIS
 
 ## 👨‍💻 Auteur
+Mathis Kairis
+Projet personnel – cybersécurité & Linux
+Open source
 
 **Security Audit Team**
 - MIT Licensed
@@ -297,5 +213,6 @@ Pour les questions, problèmes ou suggestions :
 **Dernière mise à jour:** 17 Décembre 2025
 
 Faites une ⭐ si ce projet vous a été utile !
+
 
 
