@@ -32,6 +32,10 @@ OK_COUNT=0
 WARN_COUNT=0
 FAIL_COUNT=0
 
+# JSON export support
+JSON_OUTPUT=0
+JSON_DATA="[]"
+
 ################################################################################
 # Helper Functions
 ################################################################################
@@ -58,6 +62,23 @@ check_root() {
     if [[ $EUID -ne 0 ]]; then
         echo -e "${RED}Erreur: Ce script doit être exécuté avec les droits root${NC}"
         exit 1
+    fi
+}
+
+################################################################################
+# Script Integrity Check
+################################################################################
+
+check_script_integrity() {
+    local script_path="$1"
+    local script_sha256
+    
+    if command -v sha256sum &> /dev/null; then
+        script_sha256=$(sha256sum "$script_path" 2>/dev/null | awk '{print $1}')
+        echo -e "${BLUE}Script SHA256: $script_sha256${NC}"
+    elif command -v sha256 &> /dev/null; then
+        script_sha256=$(sha256 -q "$script_path" 2>/dev/null)
+        echo -e "${BLUE}Script SHA256: $script_sha256${NC}"
     fi
 }
 
@@ -101,6 +122,25 @@ check_ssh_security() {
         print_check "$OK" "Public key authentication enabled"
     else
         print_check "$WARN" "Public key authentication status unclear"
+    fi
+    
+    # Check SSH Protocol version
+    if grep -q "^Protocol 2" "$SSH_CONFIG"; then
+        print_check "$OK" "SSH Protocol 2 enforced"
+    else
+        print_check "$WARN" "SSH Protocol 2 might not be enforced"
+    fi
+    
+    # Check MaxAuthTries to limit brute-force
+    local max_auth_tries=$(grep "^MaxAuthTries " "$SSH_CONFIG" | awk '{print $2}')
+    if [ -n "$max_auth_tries" ]; then
+        if [ "$max_auth_tries" -le 3 ]; then
+            print_check "$OK" "MaxAuthTries limited to $max_auth_tries"
+        else
+            print_check "$WARN" "MaxAuthTries is set to $max_auth_tries (consider lowering to 3)"
+        fi
+    else
+        print_check "$WARN" "MaxAuthTries not explicitly configured (default: 6)"
     fi
     
     # Check SSH port (should not be 22 for better security)
@@ -450,6 +490,58 @@ check_time_sync() {
 }
 
 ################################################################################
+# User & Account Security
+################################################################################
+
+check_user_security() {
+    print_header "👥 User & Account Security"
+    
+    # Check for users with UID 0 (other than root)
+    local uid_zero_users=$(awk -F: '($3 == 0) && ($1 != "root") {print $1}' /etc/passwd 2>/dev/null)
+    
+    if [ -n "$uid_zero_users" ]; then
+        print_check "$FAIL" "Found non-root users with UID 0:"
+        echo "$uid_zero_users" | sed 's/^/    /'
+    else
+        print_check "$OK" "No non-root users with UID 0"
+    fi
+    
+    # Check for accounts without passwords
+    if command -v passwd &> /dev/null; then
+        local no_passwd_accounts=0
+        while IFS=':' read -r username _ userid _; do
+            if [ "$userid" -ge 1000 ] 2>/dev/null; then
+                if passwd -S "$username" 2>/dev/null | grep -q "NP\|LK"; then
+                    print_check "$WARN" "Account without password or locked: $username"
+                    ((no_passwd_accounts++))
+                fi
+            fi
+        done < /etc/passwd
+        
+        if [ $no_passwd_accounts -eq 0 ]; then
+            print_check "$OK" "All user accounts are password-protected"
+        fi
+    fi
+    
+    # Check for accounts with empty password field
+    local empty_passwd=$(awk -F: '($2 == "") {print $1}' /etc/shadow 2>/dev/null)
+    
+    if [ -n "$empty_passwd" ]; then
+        print_check "$FAIL" "Found accounts with empty password field:"
+        echo "$empty_passwd" | sed 's/^/    /'
+    else
+        print_check "$OK" "No accounts with empty password field"
+    fi
+    
+    # Check for disabled login shells
+    local system_accounts=$(awk -F: '($3 < 1000 && $7 != "/sbin/nologin" && $7 != "/bin/false") {print $1}' /etc/passwd 2>/dev/null | wc -l)
+    if [ "$system_accounts" -gt 0 ]; then
+        print_check "$WARN" "Some system accounts may have login shells"
+    else
+        print_check "$OK" "System accounts properly configured with nologin shells"
+    fi
+
+################################################################################
 # System Information
 ################################################################################
 
@@ -458,10 +550,49 @@ print_system_info() {
     
     echo -e "${BLUE}Hostname:${NC} $(hostname)"
     echo -e "${BLUE}OS:${NC} $(lsb_release -ds 2>/dev/null || cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d '\"')"
-    echo -e "${BLUE}Uptime:${NC} $(uptime -p)"
-    echo -e "${BLUE}CPU Count:${NC} $(nproc)"
-    echo -e "${BLUE}Total Memory:${NC} $(free -h | awk 'NR==2 {print $2}')"
+    echo -e "${BLUE}Uptime:${NC} $(uptime -p 2>/dev/null || uptime | awk -F'up' '{print $2}')"
+    echo -e "${BLUE}CPU Count:${NC} $(nproc 2>/dev/null || echo 'N/A')"
+    echo -e "${BLUE}Total Memory:${NC} $(free -h 2>/dev/null | awk 'NR==2 {print $2}' || echo 'N/A')"
     echo ""
+}
+
+################################################################################
+# JSON Export Function
+################################################################################
+
+export_json() {
+    local output_file="$1"
+    local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    local hostname=$(hostname)
+    local risk_level="LOW"
+    
+    if [ $FAIL_COUNT -gt 0 ]; then
+        risk_level="HIGH"
+    elif [ $WARN_COUNT -gt 3 ]; then
+        risk_level="MEDIUM"
+    fi
+    
+    cat > "$output_file" << EOF
+{
+  "audit": {
+    "timestamp": "$timestamp",
+    "hostname": "$hostname",
+    "script_version": "1.1.0"
+  },
+  "results": {
+    "ok": $OK_COUNT,
+    "warnings": $WARN_COUNT,
+    "failures": $FAIL_COUNT,
+    "total": $((OK_COUNT + WARN_COUNT + FAIL_COUNT))
+  },
+  "risk_assessment": {
+    "level": "$risk_level",
+    "description": "$([ $FAIL_COUNT -gt 0 ] && echo 'High - Immediate action required' || ([ $WARN_COUNT -gt 3 ] && echo 'Medium - Review recommendations' || echo 'Low - System is well configured'))"
+  }
+}
+EOF
+
+    echo -e "${GREEN}✓ JSON export saved to: $output_file${NC}"
 }
 
 ################################################################################
@@ -510,6 +641,9 @@ main() {
     
     check_root
     
+    # Display script integrity information
+    check_script_integrity "$0"
+    
     print_system_info
     
     # Run all checks
@@ -524,10 +658,33 @@ main() {
     check_docker_security
     check_backup_jobs
     check_time_sync
+    check_user_security
     
     # Print summary
     print_summary
+    
+    # Export JSON if requested
+    if [ "$JSON_OUTPUT" = "1" ]; then
+        export_json "audit_report_$(date +%s).json"
+    fi
 }
+
+# Handle command-line arguments
+JSON_OUTPUT=0
+for arg in "$@"; do
+    case "$arg" in
+        --json)
+            JSON_OUTPUT=1
+            ;;
+        --help)
+            echo "Usage: $0 [OPTIONS]"
+            echo "Options:"
+            echo "  --json    Export audit results to JSON format"
+            echo "  --help    Show this help message"
+            exit 0
+            ;;
+    esac
+done
 
 # Run main function
 main "$@"

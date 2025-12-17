@@ -21,11 +21,20 @@ curl -O https://raw.githubusercontent.com/username/linux-audit/main/linux_audit.
 chmod +x linux_audit.sh
 ```
 
-### Option C: Docker (Safest)
+### Option C: Docker (Recommended - Most Compatible)
+
+**Note**: The script auto-detects missing commands and provides fallbacks. Docker images may be minimal but fully supported.
 
 ```bash
 docker run -it --rm -v $(pwd):/audit ubuntu:22.04 bash -c \
   "apt-get update && apt-get install -y sudo && \
+   cd /audit && chmod +x linux_audit.sh && sudo ./linux_audit.sh"
+```
+
+**Alternative with more tools pre-installed**:
+```bash
+docker run -it --rm -v $(pwd):/audit ubuntu:22.04 bash -c \
+  "apt-get update && apt-get install -y sudo curl net-tools && \
    cd /audit && chmod +x linux_audit.sh && sudo ./linux_audit.sh"
 ```
 
@@ -39,7 +48,28 @@ sudo ./linux_audit.sh
 
 # OU avec log file
 sudo ./linux_audit.sh | tee audit_report.log
+
+# Export en JSON (pour dashboard/CI-CD)
+sudo ./linux_audit.sh --json
 ```
+
+---
+
+## 2️⃣bis Vérifier l'Intégrité du Script
+
+**Avant d'exécuter**, vérifiez que le script n'a pas été altéré lors du téléchargement :
+
+```bash
+# Le script affiche automatiquement son SHA256
+sudo ./linux_audit.sh | head -20 | grep "SHA256"
+
+# Ou vérifier manuellement
+sha256sum linux_audit.sh
+
+# Comparer avec les checksums publiés sur GitHub
+```
+
+Le checksum SHA256 est une empreinte cryptographique qui change si le fichier est modifié, même d'un seul byte.
 
 ---
 
