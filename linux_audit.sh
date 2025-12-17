@@ -683,8 +683,11 @@ for arg in "$@"; do
             echo "  --help    Show this help message"
             exit 0
             ;;
+        *)
+            # Ignore unknown arguments
+            ;;
     esac
 done
 
 # Run main function
-main "$@"
+main
