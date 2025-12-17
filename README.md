@@ -38,7 +38,7 @@ Le script effectue un audit complet sur 11 domaines de sécurité critiques :
 
 ```bash
 # Cloner le dépôt
-git clone https://github.com/votre-username/linux-audit.git
+git clone [https://github.com/votre-username/linux-audit.git](https://github.com/MathisKairis/linux-audit.git)
 cd linux-audit
 
 # Rendre le script exécutable
@@ -297,3 +297,4 @@ Pour les questions, problèmes ou suggestions :
 **Dernière mise à jour:** 17 Décembre 2025
 
 Faites une ⭐ si ce projet vous a été utile !
+
